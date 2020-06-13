@@ -1,0 +1,8 @@
+tqsdk
+flask
+tushare
+requests
+pandas
+tornado
+czsc
+gm
