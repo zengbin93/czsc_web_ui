@@ -11,11 +11,9 @@ from datetime import datetime, timedelta
 from czsc import KlineAnalyze
 from gm.api import *
 
-from conf import gm_token
 
 # 在这里设置你的掘金 token，要在本地启动掘金终端，才能正常获取数据
-# set_token("set your gm token")
-set_token(gm_token)
+set_token("set your gm token")
 
 
 def get_gm_kline(symbol, end_date, freq='D', k_count=3000):
@@ -85,6 +83,7 @@ class KlineHandler(BaseHandler):
         ka = KlineAnalyze(kline)
         kline = pd.DataFrame(ka.kline)
         kline = kline.fillna("")
+        kline.loc[:, "dt"] = kline.dt.apply(str)
         columns = ["dt", "open", "close", "low", "high", "vol", 'fx_mark', 'fx', 'bi', 'xd']
 
         self.finish({'kdata': kline[columns].values.tolist()})

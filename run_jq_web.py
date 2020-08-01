@@ -1,25 +1,46 @@
 # coding: utf-8
-import json
-import os
-import pandas as pd
+import sys
+import warnings
+sys.path.insert(0, "C:\git_repo\zengbin93\czsc")
+import czsc
+warnings.warn(f"czsc version is {czsc.__version__}")
+
 from tornado.ioloop import IOLoop
 from tornado.httpserver import HTTPServer
 from tornado.options import define, options, parse_command_line
 from tornado.web import RequestHandler, Application
 from tornado.web import StaticFileHandler
-from datetime import datetime
 from czsc import KlineAnalyze
+import os
+import pickle
+import json
 import requests
-
-# 这里的参数配置一下，聚宽
-from conf import jq_mob, jq_pwd
-
+import warnings
+import pandas as pd
+from datetime import datetime
 
 url = "https://dataapi.joinquant.com/apis"
+home_path = os.path.expanduser("~")
+file_token = os.path.join(home_path, "jq.token")
+
+def set_token(jq_mob, jq_pwd):
+    """
+
+    :param jq_mob: str
+        mob是申请JQData时所填写的手机号
+    :param jq_pwd: str
+        Password为聚宽官网登录密码，新申请用户默认为手机号后6位
+    :return:
+    """
+    pickle.dump([jq_mob, jq_pwd], open(file_token, 'wb'))
 
 
 def get_token():
     """获取调用凭证"""
+    if not os.path.exists(file_token):
+        raise ValueError(f"{file_token} 文件不存在，请先调用 set_token 进行设置")
+
+    jq_mob, jq_pwd = pickle.load(open(file_token, 'rb'))
     body = {
         "method": "get_current_token",
         "mob": jq_mob,  # mob是申请JQData时所填写的手机号
@@ -36,33 +57,66 @@ def text2df(text):
     return df
 
 
-def get_kline(symbol, end_date, freq, count=2000):
+def get_kline(symbol,  end_date: datetime, freq: str, start_date: datetime = None, count=None):
+    """获取K线数据
+
+    :param symbol: str
+        聚宽标的代码
+    :param start_date: datetime
+        截止日期
+    :param end_date: datetime
+        截止日期
+    :param freq: str
+        K线级别
+    :param count: int
+        K线数量，最大值为 5000
+    :return: pd.DataFrame
+
+    >>> start_date = datetime.strptime("20200701", "%Y%m%d")
+    >>> end_date = datetime.strptime("20200719", "%Y%m%d")
+    >>> df1 = get_kline(symbol="000001.XSHG", start_date=start_date, end_date=end_date, freq="1min")
+    >>> df2 = get_kline(symbol="000001.XSHG", end_date=end_date, freq="1min", count=1000)
+    """
+    if count and count > 5000:
+        warnings.warn(f"count={count}, 超过5000的最大值限制，仅返回最后5000条记录")
+
     # 1m, 5m, 15m, 30m, 60m, 120m, 1d, 1w, 1M
     freq_convert = {"1min": "1m", "5min": '5m', '15min': '15m',
                     "30min": "30m", "60min": '60m', "D": "1d", "W": '1w'}
-    if "-" not in end_date:
-        end_date = datetime.strptime(end_date, "%Y%m%d").strftime("%Y-%m-%d")
+    if start_date:
+        data = {
+            "method": "get_price_period",
+            "token": get_token(),
+            "code": symbol,
+            "unit": freq_convert[freq],
+            "date": start_date.strftime("%Y-%m-%d"),
+            "end_date": end_date.strftime("%Y-%m-%d"),
+            # "fq_ref_date": end_date
+        }
+    elif count:
+        data = {
+            "method": "get_price",
+            "token": get_token(),
+            "code": symbol,
+            "count": count,
+            "unit": freq_convert[freq],
+            "end_date": end_date.strftime("%Y-%m-%d"),
+            # "fq_ref_date": end_date
+        }
+    else:
+        raise ValueError("start_date 和 count 不能同时为空")
 
-    data = {
-        "method": "get_price",
-        "token": get_token(),
-        "code": symbol,
-        "count": count,
-        "unit": freq_convert[freq],
-        "end_date": end_date,
-        # "fq_ref_date": end_date
-    }
     r = requests.post(url, data=json.dumps(data))
     df = text2df(r.text)
     df['symbol'] = symbol
     df.rename({'date': 'dt', 'volume': 'vol'}, axis=1, inplace=True)
     df = df[['symbol', 'dt', 'open', 'close', 'high', 'low', 'vol']]
-    for col in ['open', 'close', 'high', 'low']:
+    for col in ['open', 'close', 'high', 'low', 'vol']:
         df.loc[:, col] = df[col].apply(lambda x: round(float(x), 2))
+    df.loc[:, "dt"] = pd.to_datetime(df['dt'])
     return df
 
 
-# 端口固定为 8005，不可以调整
 define('port', type=int, default=8005, help='服务器端口')
 current_path = os.path.dirname(__file__)
 
@@ -99,11 +153,21 @@ class KlineHandler(BaseHandler):
         freq = self.get_argument('freq')
         trade_date = self.get_argument('trade_date')
         if trade_date == 'null':
-            trade_date = datetime.now().date().__str__().replace("-", "")
-        kline = get_kline(symbol=ts_code, end_date=trade_date, freq=freq, count=10000)
-        ka = KlineAnalyze(kline, bi_mode="new", xd_mode='strict')
-        kline = pd.DataFrame(ka.kline)
+            trade_date = datetime.now().date()
+        else:
+            trade_date = datetime.strptime(trade_date, "%Y%m%d")
+        kline = get_kline(symbol=ts_code, end_date=trade_date, freq=freq, count=5000)
+        kline.loc[:, "dt"] = pd.to_datetime(kline.dt)
+
+        # kline.loc[:, "is_end"] = True
+        if czsc.__version__ < "0.5":
+            ka = KlineAnalyze(kline, bi_mode="new", xd_mode='strict')
+            kline = pd.DataFrame(ka.kline_new)
+        else:
+            ka = KlineAnalyze(kline, min_bi_k=5, verbose=False)
+            kline = ka.to_df(ma_params=(5, 20), use_macd=True, use_boll=False, max_count=5000)
         kline = kline.fillna("")
+        kline.loc[:, "dt"] = kline.dt.apply(str)
         columns = ["dt", "open", "close", "low", "high", "vol", 'fx_mark', 'fx', 'bi', 'xd']
 
         self.finish({'kdata': kline[columns].values.tolist()})

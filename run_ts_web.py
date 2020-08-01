@@ -1,4 +1,10 @@
 # coding: utf-8
+import sys
+import warnings
+sys.path.insert(0, "C:\git_repo\zengbin93\czsc")
+import czsc
+warnings.warn(f"czsc version is {czsc.__version__}")
+
 import json
 import os
 import time
@@ -140,9 +146,17 @@ class KlineHandler(BaseHandler):
         if trade_date == 'null':
             trade_date = datetime.now().date().__str__().replace("-", "")
         kline = get_kline(ts_code=ts_code, end_date=trade_date, freq=freq, asset=asset)
-        ka = KlineAnalyze(kline)
-        kline = pd.DataFrame(ka.kline)
+        kline.loc[:, "dt"] = pd.to_datetime(kline.dt)
+
+        if czsc.__version__ < "0.5":
+            ka = KlineAnalyze(kline, bi_mode="new", xd_mode='strict')
+            kline = pd.DataFrame(ka.kline_new)
+        else:
+            ka = KlineAnalyze(kline, min_bi_k=5, verbose=False)
+            kline = ka.to_df(ma_params=(5, 20), use_macd=True, use_boll=False, max_count=5000)
+
         kline = kline.fillna("")
+        kline.loc[:, "dt"] = kline.dt.apply(str)
         columns = ["dt", "open", "close", "low", "high", "vol", 'fx_mark', 'fx', 'bi', 'xd']
 
         self.finish({'kdata': kline[columns].values.tolist()})

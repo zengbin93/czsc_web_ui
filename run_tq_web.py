@@ -1,12 +1,17 @@
 # coding: utf-8
+import os
 import json
 import pandas as pd
+import czsc
 from czsc import KlineAnalyze
 from datetime import datetime, timedelta
 from flask import Flask, request, make_response, jsonify
 from tqsdk import TqApi
 
-app = Flask(__name__, static_folder="./web")
+
+base_path = os.path.split(os.path.realpath(__file__))[0]
+web_path = os.path.join(base_path, 'web')
+app = Flask(__name__, static_folder=web_path)
 
 # api = TqApi(_stock=True)  # 支持股票数据
 api = TqApi()
@@ -18,7 +23,7 @@ def format_kline(kline):
         try:
             dt = datetime.utcfromtimestamp(t/1000000000)
             dt = dt + timedelta(hours=8)    # 中国默认时区
-            return dt.strftime("%Y-%m-%d %H:%M:%S")
+            return dt
         except:
             return ""
 
@@ -39,7 +44,6 @@ def get_kline(symbol="SHFE.cu2002", freq='1min', k_count=3000):
                 '60min': 3600, 'D': 3600*24, 'W': 86400*7}
     df = api.get_kline_serial(symbol, duration_seconds=freq_map[freq], data_length=k_count)
     df = format_kline(df)
-    print(df.head(), df.shape)
     return df
 
 
@@ -56,13 +60,19 @@ def kline():
         data = request.args
     else:
         raise ValueError
-    print(data)
+
     ts_code = data.get('ts_code')
     freq = data.get('freq')
     k = get_kline(symbol=ts_code, freq=freq, k_count=5000)
-    ka = KlineAnalyze(k, bi_mode="new", xd_mode='strict')
-    k = pd.DataFrame(ka.kline)
+    if czsc.__version__ < "0.5":
+        ka = KlineAnalyze(k, bi_mode="new", xd_mode='strict')
+        k = pd.DataFrame(ka.kline_new)
+    else:
+        ka = KlineAnalyze(k, min_bi_k=5, verbose=False)
+        k = ka.to_df(ma_params=(5, 20), use_macd=True, use_boll=False, max_count=5000)
+
     k = k.fillna("")
+    kline.loc[:, "dt"] = kline.dt.apply(str)
     columns = ["dt", "open", "close", "low", "high", "vol", 'fx_mark', 'fx', 'bi', 'xd']
     res = make_response(jsonify({'kdata': k[columns].values.tolist()}))
     res.headers['Access-Control-Allow-Origin'] = '*'
