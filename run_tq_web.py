@@ -69,7 +69,7 @@ def kline():
         k = pd.DataFrame(ka.kline_new)
     else:
         ka = KlineAnalyze(k, min_bi_k=5, verbose=False)
-        k = ka.to_df(ma_params=(5, 20), use_macd=True, use_boll=False, max_count=5000)
+        k = ka.to_df(ma_params=(5, 20), use_macd=True, max_count=5000)
 
     k = k.fillna("")
     kline.loc[:, "dt"] = kline.dt.apply(str)

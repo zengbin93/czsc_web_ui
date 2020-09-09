@@ -164,8 +164,8 @@ class KlineHandler(BaseHandler):
             ka = KlineAnalyze(kline, bi_mode="new", xd_mode='strict')
             kline = pd.DataFrame(ka.kline_new)
         else:
-            ka = KlineAnalyze(kline, min_bi_k=5, verbose=False)
-            kline = ka.to_df(ma_params=(5, 20), use_macd=True, use_boll=False, max_count=5000)
+            ka = KlineAnalyze(kline, bi_mode="new", verbose=False)
+            kline = ka.to_df(ma_params=(5, 20), use_macd=True, max_count=5000)
         kline = kline.fillna("")
         kline.loc[:, "dt"] = kline.dt.apply(str)
         columns = ["dt", "open", "close", "low", "high", "vol", 'fx_mark', 'fx', 'bi', 'xd']
@@ -192,7 +192,7 @@ if __name__ == '__main__':
 # https://www.joinquant.com/help/api/help?name=JQData#%E8%8E%B7%E5%8F%96%E6%A0%87%E7%9A%84%E5%9F%BA%E6%9C%AC%E4%BF%A1%E6%81%AF
 
 # 使用聚宽数据，只需要给出正确的标的代码，支持股票和期货，有实时数据，不需要设置 asset 参数
-# http://localhost:8005/?ts_code=000001.XSHG&trade_date=20200613&freqs=D,30min,5min,1min
+# http://localhost:8005/?ts_code=000001.XSHG&trade_date=20200908&freqs=1min
 
 
 # 聚宽期货数据：https://www.joinquant.com/help/api/help?name=Future
