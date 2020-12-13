@@ -1,9 +1,4 @@
 # coding: utf-8
-# import sys
-# import warnings
-# sys.path.insert(0, "C:\git_repo\zengbin93\czsc")
-# import czsc
-# warnings.warn(f"czsc version is {czsc.__version__}")
 
 import czsc
 import json
@@ -17,11 +12,14 @@ from tornado.web import RequestHandler, Application
 from tornado.web import StaticFileHandler
 import tushare as ts
 from datetime import datetime, timedelta
+import czsc
 from czsc import KlineAnalyze
 
 # 首次使用，需要在这里设置你的 tushare token，用于获取数据；在同一台机器上，tushare token 只需要设置一次
 # 没有 token，到 https://tushare.pro/register?reg=7 注册获取
 # ts.set_token("your tushare token")
+
+assert czsc.__version__ == "0.5.8", "当前 czsc 版本为 {}，请升级为 0.5.8 版本".format(czsc.__version__)
 
 
 def _get_start_date(end_date, freq):
@@ -149,13 +147,8 @@ class KlineHandler(BaseHandler):
         kline = get_kline(ts_code=ts_code, end_date=trade_date, freq=freq, asset=asset)
         kline.loc[:, "dt"] = pd.to_datetime(kline.dt)
 
-        if czsc.__version__ < "0.5":
-            ka = KlineAnalyze(kline, bi_mode="new")
-            kline = pd.DataFrame(ka.kline_new)
-        else:
-            ka = KlineAnalyze(kline, verbose=False)
-            kline = ka.to_df(ma_params=(5, 20), use_macd=True, max_count=5000)
-
+        ka = KlineAnalyze(kline, bi_mode="new", verbose=False, use_xd=True, max_count=5000)
+        kline = ka.to_df(ma_params=(5, 20), use_macd=True, max_count=5000, mode='new')
         kline = kline.fillna("")
         kline.loc[:, "dt"] = kline.dt.apply(str)
         columns = ["dt", "open", "close", "low", "high", "vol", 'fx_mark', 'fx', 'bi', 'xd']
