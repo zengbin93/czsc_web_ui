@@ -1,19 +1,21 @@
 # coding: utf-8
 import json
 import os
-import pandas as pd
 from tornado.ioloop import IOLoop
 from tornado.httpserver import HTTPServer
 from tornado.options import define, parse_command_line, options
 from tornado.web import RequestHandler, Application
 from tornado.web import StaticFileHandler
 from datetime import datetime, timedelta
+import czsc
 from czsc import KlineAnalyze
 from gm.api import *
 
 
 # 在这里设置你的掘金 token，要在本地启动掘金终端，才能正常获取数据
 set_token("set your gm token")
+
+assert czsc.__version__ == "0.5.8", "当前 czsc 版本为 {}，请升级为 0.5.8 版本".format(czsc.__version__)
 
 
 def get_gm_kline(symbol, end_date, freq='D', k_count=3000):
@@ -80,8 +82,8 @@ class KlineHandler(BaseHandler):
         if trade_date == 'null':
             trade_date = datetime.now().date().__str__().replace("-", "")
         kline = get_gm_kline(symbol=ts_code, end_date=trade_date, freq=freq, k_count=3000)
-        ka = KlineAnalyze(kline)
-        kline = pd.DataFrame(ka.kline)
+        ka = KlineAnalyze(kline, bi_mode="new", verbose=False, use_xd=True, max_count=5000)
+        kline = ka.to_df(ma_params=(5, 20), use_macd=True, max_count=5000, mode='new')
         kline = kline.fillna("")
         kline.loc[:, "dt"] = kline.dt.apply(str)
         columns = ["dt", "open", "close", "low", "high", "vol", 'fx_mark', 'fx', 'bi', 'xd']
