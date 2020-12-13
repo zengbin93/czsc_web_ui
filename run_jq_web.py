@@ -1,10 +1,4 @@
 # coding: utf-8
-import sys
-import warnings
-sys.path.insert(0, "C:\git_repo\zengbin93\czsc")
-import czsc
-warnings.warn(f"czsc version is {czsc.__version__}")
-
 from tornado.ioloop import IOLoop
 from tornado.httpserver import HTTPServer
 from tornado.options import define, options, parse_command_line
@@ -13,6 +7,7 @@ from tornado.web import StaticFileHandler
 from czsc import KlineAnalyze
 import os
 import pickle
+import czsc
 import json
 import requests
 import warnings
@@ -22,6 +17,8 @@ from datetime import datetime
 url = "https://dataapi.joinquant.com/apis"
 home_path = os.path.expanduser("~")
 file_token = os.path.join(home_path, "jq.token")
+
+assert czsc.__version__ == "0.5.8", "当前 czsc 版本为 {}，请升级为 0.5.8 版本".format(czsc.__version__)
 
 def set_token(jq_mob, jq_pwd):
     """
@@ -158,14 +155,8 @@ class KlineHandler(BaseHandler):
             trade_date = datetime.strptime(trade_date, "%Y%m%d")
         kline = get_kline(symbol=ts_code, end_date=trade_date, freq=freq, count=5000)
         kline.loc[:, "dt"] = pd.to_datetime(kline.dt)
-
-        # kline.loc[:, "is_end"] = True
-        if czsc.__version__ < "0.5":
-            ka = KlineAnalyze(kline, bi_mode="new", xd_mode='strict')
-            kline = pd.DataFrame(ka.kline_new)
-        else:
-            ka = KlineAnalyze(kline, bi_mode="new", verbose=False)
-            kline = ka.to_df(ma_params=(5, 20), use_macd=True, max_count=5000)
+        ka = KlineAnalyze(kline, bi_mode="new", verbose=False, use_xd=True, max_count=5000)
+        kline = ka.to_df(ma_params=(5, 20), use_macd=True, max_count=5000, mode='new')
         kline = kline.fillna("")
         kline.loc[:, "dt"] = kline.dt.apply(str)
         columns = ["dt", "open", "close", "low", "high", "vol", 'fx_mark', 'fx', 'bi', 'xd']
@@ -192,7 +183,7 @@ if __name__ == '__main__':
 # https://www.joinquant.com/help/api/help?name=JQData#%E8%8E%B7%E5%8F%96%E6%A0%87%E7%9A%84%E5%9F%BA%E6%9C%AC%E4%BF%A1%E6%81%AF
 
 # 使用聚宽数据，只需要给出正确的标的代码，支持股票和期货，有实时数据，不需要设置 asset 参数
-# http://localhost:8005/?ts_code=000001.XSHG&trade_date=20200908&freqs=1min
+# http://localhost:8005/?ts_code=000001.XSHG&trade_date=20201121&freqs=1min
 
 
 # 聚宽期货数据：https://www.joinquant.com/help/api/help?name=Future
@@ -207,3 +198,4 @@ if __name__ == '__main__':
 # 郑商所	        .XZCE	    'CY8888.XZCE'	棉纱期货指数
 # 上海能源交易所	.XINE	    'SC9999.XINE'	原油主力合约
 # ```
+
